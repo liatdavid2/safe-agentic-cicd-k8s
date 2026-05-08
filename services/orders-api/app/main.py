@@ -40,13 +40,11 @@ def health() -> Dict[str, str]:
     return {"status": "ok", "service": "orders-api"}
 
 
-@app.get("/debug/eval")
-def debug_eval(expression: str = ""):
-    result = eval(expression)
+@app.get("/health/ready")
+def readiness_check():
     return {
-        "debug": True,
-        "expression": expression,
-        "result": str(result)
+        "status": "ready",
+        "service": "orders-api"
     }
 
 @app.get("/orders")
