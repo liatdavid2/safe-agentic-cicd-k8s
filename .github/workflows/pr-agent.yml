@@ -7,56 +7,6 @@ on:
 jobs:
   pr-agent:
     runs-on: ubuntu-latest
-    env:
-      MINIGPT_API_KEY: ${{ secrets.MINIGPT_API_KEY }}
-      MINIGPT_MODEL: ${{ secrets.MINIGPT_MODEL }}
-      MINIGPT_CHAT_URL: ${{ vars.MINIGPT_CHAT_URL || 'https://app.meingpt.com/api/openai/v1/chat/completions' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          pip install -r services/orders-api/requirements.txt
-          pip install -r agents/requirements.txt
-
-      - name: Run unit tests
-        run: |
-          cd services/orders-api
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests
-          cd ../..
-
-      - name: Prepare artifacts
-        run: mkdir -p artifacts
-
-      - name: Capture PR diff
-        run: git diff origin/${{ github.base_ref }}...HEAD > artifacts/pr_diff.diff
-
-      - name: Run LLM security agent
-        run: python -m agents.agent_runner --mode security_scan --out artifacts/security_report.md
-
-      - name: Run LLM PR review agent
-        run: python -m agents.agent_runner --mode pr_review --diff-file artifacts/pr_diff.diff --out artifacts/pr_review_report.md
-
-      - name: Upload agent reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: agentic-pr-reports
-          path: artifacts/*.md
-name: PR Agent Review
-
-on:
-  pull_request:
-    branches: [main]
-
-jobs:
-  pr-agent:
-    runs-on: ubuntu-latest
 
     outputs:
       security_risk: ${{ steps.security_gate.outputs.security_risk }}
@@ -120,6 +70,34 @@ jobs:
             --diff-file artifacts/pr_diff.diff \
             --out artifacts/pr_review_report.md
 
+      - name: Show security review before approval
+        if: always()
+        run: |
+          echo "## Security Review Before Approval" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Security Scan Agent" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f artifacts/security_report.md ]; then
+            cat artifacts/security_report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Security report was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "---" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### PR Review Agent" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f artifacts/pr_review_report.md ]; then
+            cat artifacts/pr_review_report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "PR review report was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Evaluate security risk
         id: security_gate
         if: always()
@@ -152,7 +130,9 @@ jobs:
     needs: pr-agent
     if: needs.pr-agent.outputs.security_risk == 'true'
     runs-on: ubuntu-latest
-    environment: security-approval
+    environment:
+      name: security-approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
       - name: Human security approval required
