@@ -39,6 +39,13 @@ def _record(start: float, error: bool = False) -> None:
 def health() -> Dict[str, str]:
     return {"status": "ok", "service": "orders-api"}
 
+@app.get("/debug/echo")
+def debug_echo(q: str = ""):
+    return {
+        "debug": True,
+        "message": q
+    }
+
 
 @app.get("/orders")
 def list_orders() -> Dict[str, object]:
