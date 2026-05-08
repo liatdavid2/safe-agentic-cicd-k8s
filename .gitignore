@@ -8,3 +8,6 @@ artifacts/**/*.txt
 .mypy_cache/
 .pytest_cache/
 .env.example
+
+.env
+.venv/
