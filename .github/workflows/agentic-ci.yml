@@ -10,6 +10,8 @@ on:
 jobs:
   agentic-ci:
     runs-on: ubuntu-latest
+    outputs:
+      security_risk: ${{ steps.security_gate.outputs.security_risk }}
 
     permissions:
       contents: read
@@ -82,6 +84,26 @@ jobs:
             --diff-file .ci/changed.diff \
             --out reports/security_scan.md
 
+      - name: Evaluate security risk
+        id: security_gate
+        if: always()
+        shell: bash
+        run: |
+          SECURITY_RISK=false
+
+          if [ -f reports/security_scan.md ]; then
+            if grep -Eiq "Risk level: High|Severity: High|Merge blockers" reports/security_scan.md; then
+              SECURITY_RISK=true
+            fi
+          fi
+
+          echo "security_risk=$SECURITY_RISK" >> "$GITHUB_OUTPUT"
+
+          if [ "$SECURITY_RISK" = "true" ]; then
+            echo "::warning title=Security approval required::High security risk or merge blockers detected."
+          else
+            echo "No high security risk detected."
+          fi      
       - name: Create evidence file
         if: always()
         run: |
@@ -159,3 +181,15 @@ jobs:
               issue_number: context.issue.number,
               body
             });
+
+  security-approval:
+    needs: agentic-ci
+    if: needs.agentic-ci.outputs.security_risk == 'true'
+    runs-on: ubuntu-latest
+    environment: security-approval
+
+    steps:
+      - name: Wait for human security approval
+        run: |
+          echo "Security risk was detected."
+          echo "Human approval was required before continuing."
