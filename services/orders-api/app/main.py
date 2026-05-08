@@ -40,13 +40,6 @@ def health() -> Dict[str, str]:
     return {"status": "ok", "service": "orders-api"}
 
 
-@app.get("/health/ready")
-def readiness_check():
-    return {
-        "status": "ready",
-        "service": "orders-api"
-    }
-
 @app.get("/orders")
 def list_orders() -> Dict[str, object]:
     start = time.time()
