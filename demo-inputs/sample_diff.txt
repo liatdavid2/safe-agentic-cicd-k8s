@@ -1,0 +1,2 @@
+Added new endpoint without validation 
+User input is returned directly in the response 

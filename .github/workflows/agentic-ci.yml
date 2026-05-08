@@ -17,9 +17,11 @@ jobs:
 
     env:
       MINIGPT_API_KEY: ${{ secrets.MINIGPT_API_KEY }}
-      MINIGPT_CHAT_URL: ${{ secrets.MINIGPT_CHAT_URL }}
-      MINIGPT_MODELS_URL: ${{ secrets.MINIGPT_MODELS_URL }}
       MINIGPT_MODEL: ${{ secrets.MINIGPT_MODEL }}
+      MINIGPT_CHAT_URL: ${{ secrets.MINIGPT_CHAT_URL }}
+      MINIGPT_TEMPERATURE: "0.1"
+      MINIGPT_TIMEOUT_SECONDS: "60"
+      ORDERS_API_URL: http://localhost:8000
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
