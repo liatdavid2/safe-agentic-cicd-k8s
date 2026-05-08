@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devops-agent-rca
+  namespace: agentic-devops
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: devops-agent-runner
+      restartPolicy: Never
+      containers:
+        - name: devops-agent-runner
+          image: devops-agent-runner:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: minigpt-secret
+          command: ["python", "-m", "agents.agent_runner"]
+          args:
+            - "--mode"
+            - "rca"
+            - "--evidence-file"
+            - "artifacts/deployment_evidence.txt"
+            - "--out"
+            - "artifacts/rca_reports/rca_from_job.md"

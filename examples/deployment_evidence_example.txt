@@ -1,0 +1,17 @@
+# Kubernetes Evidence
+namespace=agentic-devops
+deployment=orders-api
+
+## Smoke test
+/health passed in 15 ms
+/orders returned HTTP 500 in 32 ms: {"detail":"Simulated production bug"}
+
+## kubectl get deployment
+orders-api 2/2 replicas available
+
+## kubectl logs deployment
+INFO: 10.0.0.1 GET /health 200
+ERROR: 10.0.0.1 GET /orders 500 Simulated production bug
+
+## Recent change
+Deployment image was updated from orders-api:v1 to orders-api:v2.

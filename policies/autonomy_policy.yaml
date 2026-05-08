@@ -1,0 +1,25 @@
+environment: dev
+
+rollback:
+  dev:
+    mode: auto_allowed
+  staging:
+    mode: auto_allowed
+  production:
+    mode: approval_required
+
+scale:
+  mode: bounded_auto
+  min_replicas: 2
+  max_replicas: 5
+
+forbidden_actions:
+  - delete_namespace
+  - delete_pvc
+  - edit_secrets
+  - delete_cluster_role
+  - delete_secret
+
+audit:
+  enabled: true
+  path: artifacts/audit

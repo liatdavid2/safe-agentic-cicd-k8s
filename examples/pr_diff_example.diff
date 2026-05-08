@@ -1,0 +1,13 @@
+diff --git a/services/orders-api/app/main.py b/services/orders-api/app/main.py
+index 1111111..2222222 100644
+--- a/services/orders-api/app/main.py
++++ b/services/orders-api/app/main.py
+@@ -30,6 +30,8 @@ def list_orders():
+     start = time.time()
+     mode = _bug_mode()
+     try:
++        # New retry path added for payment timeout handling.
++        time.sleep(2)
+         if mode == "latency":
+             time.sleep(3)
+         if mode == "error":
