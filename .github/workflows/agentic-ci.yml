@@ -57,14 +57,13 @@ jobs:
           fi
 
       - name: Run API tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/services/orders-api
         run: |
           set -o pipefail
-
-          if find services/orders-api -name "test_*.py" | grep -q .; then
-            pytest services/orders-api | tee reports/tests.txt
-          else
-            echo "No tests found under services/orders-api" | tee reports/tests.txt
-          fi
+          mkdir -p reports
+          python -c "from app.main import app; print('app import ok')"
+          python -m pytest services/orders-api/tests | tee reports/tests.txt
 
       - name: Run PR Review Agent
         if: always()
