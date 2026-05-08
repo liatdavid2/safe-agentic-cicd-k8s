@@ -1,0 +1,114 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      MINIGPT_API_KEY: ${{ secrets.MINIGPT_API_KEY }}
+      MINIGPT_MODEL: ${{ secrets.MINIGPT_MODEL }}
+      MINIGPT_CHAT_URL: ${{ vars.MINIGPT_CHAT_URL || 'https://app.meingpt.com/api/openai/v1/chat/completions' }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      ENVIRONMENT: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r services/orders-api/requirements.txt
+          pip install -r agents/requirements.txt
+
+      - name: Run unit tests
+        run: |
+          cd services/orders-api
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests
+          cd ../..
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f services/orders-api/Dockerfile .
+          docker push $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "IMAGE=$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
+
+      - name: Apply base manifests
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/orders-service.yaml
+          kubectl apply -f k8s/orders-deployment.yaml
+
+      - name: Deploy image
+        run: |
+          kubectl set image deployment/orders-api orders-api=$IMAGE -n agentic-devops
+          kubectl rollout status deployment/orders-api -n agentic-devops --timeout=180s
+
+      - name: Smoke test through port-forward
+        id: smoke
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          kubectl port-forward svc/orders-api 8000:80 -n agentic-devops > artifacts/port_forward.log 2>&1 &
+          echo $! > artifacts/port_forward.pid
+          sleep 8
+          python scripts/smoke_test.py --base-url http://localhost:8000 | tee artifacts/smoke_test.txt
+
+      - name: Collect evidence on failure
+        if: steps.smoke.outcome == 'failure'
+        run: |
+          bash scripts/collect_k8s_evidence.sh agentic-devops orders-api > artifacts/deployment_evidence.txt
+          cat artifacts/smoke_test.txt >> artifacts/deployment_evidence.txt || true
+
+      - name: Run RCA agent on failure
+        if: steps.smoke.outcome == 'failure'
+        run: python -m agents.agent_runner --mode rca --evidence-file artifacts/deployment_evidence.txt --out artifacts/rca_reports/rca.md
+
+      - name: Run rollback agent on failure
+        if: steps.smoke.outcome == 'failure'
+        run: python -m agents.agent_runner --mode rollback --namespace agentic-devops --deployment orders-api --environment staging --evidence-file artifacts/rca_reports/rca.md --out artifacts/audit/rollback_audit.json
+
+      - name: Create issue report on failure
+        if: steps.smoke.outcome == 'failure'
+        run: python -m agents.agent_runner --mode issue --evidence-file artifacts/rca_reports/rca.md --out artifacts/issues/incident_issue.md
+
+      - name: Upload deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-artifacts
+          path: artifacts/**
+
+      - name: Fail workflow if smoke test failed
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
