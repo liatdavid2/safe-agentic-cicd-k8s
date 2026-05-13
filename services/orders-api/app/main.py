@@ -1,9 +1,9 @@
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List,Literal
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="Orders API", version="1.0.0")
 
