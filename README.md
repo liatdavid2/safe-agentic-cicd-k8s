@@ -1,372 +1,403 @@
-# Safe Agentic CI/CD for Kubernetes
+# Safe Agentic CI/CD with Kubernetes Deployment Analysis Agent
 
-AI-powered DevOps agents for pull request review, security analysis, Kubernetes deployment checks, root-cause analysis, rollback control, issue generation, and audit logging.
+This project demonstrates a CI/CD pipeline that deploys an application into Kubernetes, collects real deployment information, and runs an LLM-based agent that explains the deployment result.
 
-This first version intentionally avoids Argo CD and Argo Rollouts. It uses GitHub Actions, Docker, kubectl, Kubernetes, and EKS.
+The goal is to show a practical DevOps flow with GitHub Actions, Kubernetes, KIND, Docker, and an agent that analyzes deployment evidence.
 
-Important: this project is LLM-only for agent reasoning. There is no rule-based fallback. If the MiniGPT / meinGPT API key, model, or endpoint is missing or invalid, agent commands fail fast instead of silently switching to rules.
+## What This Project Shows
 
-## Architecture
+This project demonstrates three CI/CD capabilities:
 
-```text
-+----------------------+        +--------------------------+
-| Developer Pull Req   | -----> | GitHub Actions PR CI     |
-+----------------------+        +------------+-------------+
-                                         |
-                                         v
-                              +--------------------------+
-                              | devops-agent-runner     |
-                              | PR Review Agent         |
-                              | Security Agent          |
-                              +------------+-------------+
-                                           |
-                                           v
-                                  PR report / artifact
+1. Main CI workflow
+2. Security approval gate
+3. Kubernetes deployment test with KIND and an analysis agent
 
-+----------------------+        +--------------------------+
-| Merge to main        | -----> | GitHub Actions Deploy   |
-+----------------------+        +------------+-------------+
-                                           |
-                                           v
-                              +--------------------------+
-                              | Build Docker image       |
-                              | Push to ECR              |
-                              | kubectl set image        |
-                              +------------+-------------+
-                                           |
-                                           v
-                              +--------------------------+
-                              | EKS / Kubernetes         |
-                              | orders-api Deployment    |
-                              +------------+-------------+
-                                           |
-                                           v
-                              +--------------------------+
-                              | Smoke Test               |
-                              | RCA Agent                |
-                              | Rollback Agent           |
-                              | Issue Agent              |
-                              +--------------------------+
-```
+The pipeline does not only build code. It also creates a temporary Kubernetes cluster, deploys the service, checks if it is healthy, collects Kubernetes evidence, and generates a deployment analysis report.
 
-## Repository structure
+## Simple Architecture
 
 ```text
-safe-agentic-cicd-k8s/
-├─ services/orders-api/          FastAPI demo service
-├─ agents/                       LLM-only DevOps agents
-├─ k8s/                          Kubernetes manifests
-├─ policies/                     Autonomy and rollback policies
-├─ scripts/                      Smoke test, deploy, rollback, evidence collection
-├─ examples/                     Example PR diff for local testing
-├─ artifacts/                    Generated reports and audit files
-└─ .github/workflows/            GitHub Actions templates
-```
+GitHub Push or Pull Request
+        |
+        v
+GitHub Actions
+        |
+        +--> Main CI
+        |
+        +--> Security Approval Gate
+        |
+        +--> KIND Kubernetes Deployment Test
+                 |
+                 v
+          Temporary Kubernetes Cluster
+                 |
+                 v
+          Deploy Orders API
+                 |
+                 v
+          Collect Kubernetes Evidence
+                 |
+                 v
+          Run Deployment Analysis Agent
+                 |
+                 v
+          Print Report in CI Logs
+````
 
-## MiniGPT / meinGPT configuration
+## The Three CI/CD Parts
 
-The code uses an OpenAI-compatible chat-completions API.
+### 1. Main CI Workflow
 
-The default URLs match the public meinGPT API documentation:
+This is the regular CI check.
+
+In GitHub Actions, it appears as:
 
 ```text
-POST https://app.meingpt.com/api/openai/v1/chat/completions
-GET  https://app.meingpt.com/api/models/v1
+Agentic CI / agentic-ci
 ```
 
-Create `.env`:
+If this check is green, the main CI workflow completed successfully.
 
-```bash
-cp .env.example .env
+### 2. Security Approval Gate
+
+This is a manual approval step.
+
+In GitHub Actions, it appears as:
+
+```text
+Agentic CI / security-approval
 ```
 
-Edit `.env`:
+This step can stay in a `Waiting` state until approval is given.
 
-```env
-MINIGPT_API_KEY=sk_meingpt_your_token_here
-MINIGPT_MODEL=replace_with_model_id_from_your_account
-MINIGPT_CHAT_URL=https://app.meingpt.com/api/openai/v1/chat/completions
-MINIGPT_MODELS_URL=https://app.meingpt.com/api/models/v1
-MINIGPT_TEMPERATURE=0.1
+The purpose is to show that the pipeline supports security control before continuing with sensitive actions.
+
+This is useful in real DevOps systems because some changes should not continue automatically without approval.
+
+### 3. Kubernetes Deployment Test with KIND
+
+This is the Kubernetes part of the pipeline.
+
+In GitHub Actions, it appears as:
+
+```text
+KIND CI RCA / kind-ci-rca
 ```
 
-To list available models for your token:
+The name in GitHub Actions still contains `RCA`, but the simple meaning is:
 
-```bash
-python -m agents.list_models
+```text
+Kubernetes deployment analysis
 ```
 
-Then copy one model `id` into `MINIGPT_MODEL`.
+KIND means Kubernetes in Docker. It allows GitHub Actions to create a temporary Kubernetes cluster inside the CI runner.
 
-## Local Python setup
+The workflow does the following:
 
-```bash
-python -m venv .venv
-. .venv/Scripts/activate  # Windows Git Bash
-# or: source .venv/bin/activate
-
-pip install -r services/orders-api/requirements.txt
-pip install -r agents/requirements.txt
+```text
+Create a temporary KIND cluster
+Build the Orders API Docker image
+Build the agent Docker image
+Load both images into KIND
+Deploy the Orders API to Kubernetes
+Wait until the deployment is healthy
+Collect Kubernetes evidence
+Run the deployment analysis agent
+Print the report in the CI logs
+Upload the report as a CI artifact
 ```
 
-## Run the API locally
+## What Is a Deployment Analysis Report?
 
-```bash
-uvicorn services.orders-api.app.main:app --host 0.0.0.0 --port 8000
+A deployment analysis report explains what happened during the Kubernetes deployment.
+
+If something failed, the report tries to explain the likely reason.
+
+For example:
+
+```text
+The pod failed because the Docker image was not found.
+The pod failed because a Kubernetes Secret was missing.
+The deployment failed because the health check did not pass.
 ```
 
-Because the folder name contains a hyphen, the easier local command is:
+If everything worked, the report says that no issue was detected.
 
-```bash
-cd services/orders-api
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+In traditional DevOps, this kind of report is often called Root Cause Analysis.
+
+Root Cause Analysis means finding the likely reason for a problem.
+
+In this project, the report is generated automatically from real Kubernetes evidence.
+
+## What Is the Agent?
+
+The agent is a Python component that reads Kubernetes evidence and generates a human-readable deployment report.
+
+It receives information such as:
+
+```text
+Pod status
+Deployment status
+Service status
+Application logs
+Kubernetes events
 ```
 
-Test:
+Then it creates a structured report with:
 
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/orders
-python scripts/smoke_test.py --base-url http://localhost:8000
+```text
+Service name
+Symptoms
+Evidence
+Likely cause
+Recommended action
+Follow-up tests
 ```
 
-## Run tests
+In this project, the agent runs after the Orders API is deployed.
 
-```bash
-pytest services/orders-api/tests
+## Orders API
+
+The sample service is the Orders API.
+
+It is deployed to Kubernetes using:
+
+```text
+k8s/orders-deployment.yaml
+k8s/orders-service.yaml
 ```
 
-## Build Docker images
+The deployment runs two replicas:
 
-```bash
-docker build -t orders-api:local -f services/orders-api/Dockerfile .
-docker build -t devops-agent-runner:local -f agents/Dockerfile .
+```yaml
+replicas: 2
 ```
 
-Run the API container:
+The deployment uses this Docker image:
 
-```bash
-docker run --rm -p 8000:8000 orders-api:local
+```yaml
+image: orders-api:kind
+imagePullPolicy: Never
 ```
 
-## Run LLM agents locally
+This is important because the image is built inside GitHub Actions and loaded directly into the temporary KIND cluster.
 
-All commands require `.env` with `MINIGPT_API_KEY` and `MINIGPT_MODEL`.
+## Agent Job
 
-PR review:
+The deployment analysis agent runs as a temporary Kubernetes Job.
 
-```bash
-python -m agents.agent_runner \
-  --mode pr_review \
-  --diff-file examples/pr_diff_example.diff \
-  --out artifacts/pr_review_report.md
+A Kubernetes Job is used for a task that runs once and then finishes.
+
+In this project:
+
+```text
+orders-api          = service that keeps running
+devops-agent-rca    = temporary job that analyzes the deployment
 ```
 
-Security review:
-
-```bash
-python -m agents.agent_runner \
-  --mode security_scan \
-  --out artifacts/security_report.md
-```
-
-Deployment decision from an existing evidence file:
-
-```bash
-python -m agents.agent_runner \
-  --mode deploy_check \
-  --evidence-file examples/deployment_evidence_example.txt \
-  --out artifacts/deployment_decision.md
-```
-
-RCA from collected evidence:
+The job runs the agent code:
 
 ```bash
 python -m agents.agent_runner \
   --mode rca \
-  --evidence-file examples/deployment_evidence_example.txt \
-  --out artifacts/rca_reports/rca_local.md
+  --evidence-file /evidence/deployment_evidence.txt \
+  --out /tmp/rca_from_job.md
 ```
 
-Generate issue text:
+Then it prints the report:
 
 ```bash
-python -m agents.agent_runner \
-  --mode issue \
-  --evidence-file artifacts/rca_reports/rca_local.md \
-  --out artifacts/issues/incident_issue.md
+cat /tmp/rca_from_job.md
 ```
 
-## Run on Minikube
+## Example Successful Report
 
-Start Minikube:
+Example output from GitHub Actions:
 
-```bash
-minikube start
+```text
+===== RCA REPORT =====
+
+# Incident Report: Orders API Deployment
+
+## Service
+Orders API
+
+## Symptoms
+- Successful deployment of the Orders API with 2 replicas.
+- Both pods are in a Running state.
+- Health checks returning 200 OK.
+
+## Evidence
+- Deployment status: 2/2 replicas available.
+- Both Orders API pods are running.
+- Logs show successful application startup and health checks.
+
+## Likely Root Cause
+No issues detected during the deployment process.
+
+## Recommended Action
+Monitor the Orders API for errors or performance issues.
+
+## Follow-Up Tests
+1. Run load testing.
+2. Monitor application logs.
+3. Verify that the health endpoint remains responsive.
 ```
 
-Build image directly inside Minikube:
+This means the Kubernetes deployment worked successfully.
 
-```bash
-minikube image build -t orders-api:local -f services/orders-api/Dockerfile .
+## GitHub Actions Result
+
+A successful run shows:
+
+```text
+KIND CI RCA / kind-ci-rca - Successful
 ```
 
-Deploy:
+This means:
 
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/orders-deployment.yaml
-kubectl apply -f k8s/orders-service.yaml
-kubectl rollout status deployment/orders-api -n agentic-devops
+```text
+The temporary Kubernetes cluster was created.
+The Docker images were built.
+The images were loaded into Kubernetes.
+The Orders API was deployed.
+The deployment became healthy.
+The analysis agent ran successfully.
+The report was printed in the CI logs.
 ```
 
-Port forward:
+## Required GitHub Secrets
 
-```bash
-kubectl port-forward svc/orders-api 8000:80 -n agentic-devops
-```
+The agent uses MINIGPT or another LLM backend.
 
-Smoke test:
-
-```bash
-python scripts/smoke_test.py --base-url http://localhost:8000
-```
-
-## Simulate a bad deployment
-
-Patch the deployment to enable a simulated bug:
-
-```bash
-kubectl set env deployment/orders-api BUG_MODE=error -n agentic-devops
-kubectl rollout status deployment/orders-api -n agentic-devops
-```
-
-Run smoke test:
-
-```bash
-python scripts/smoke_test.py --base-url http://localhost:8000
-```
-
-Collect evidence:
-
-```bash
-bash scripts/collect_k8s_evidence.sh agentic-devops orders-api > artifacts/deployment_evidence.txt
-```
-
-Run RCA:
-
-```bash
-python -m agents.agent_runner \
-  --mode rca \
-  --evidence-file artifacts/deployment_evidence.txt \
-  --out artifacts/rca_reports/rca_after_failure.md
-```
-
-Rollback in dev/staging according to policy:
-
-```bash
-python -m agents.agent_runner \
-  --mode rollback \
-  --namespace agentic-devops \
-  --deployment orders-api \
-  --environment dev \
-  --evidence-file artifacts/rca_reports/rca_after_failure.md \
-  --out artifacts/audit/rollback_audit.json
-```
-
-## EKS flow
-
-Create ECR repositories:
-
-```bash
-aws ecr create-repository --repository-name orders-api --region us-east-1
-aws ecr create-repository --repository-name devops-agent-runner --region us-east-1
-```
-
-Create EKS cluster:
-
-```bash
-eksctl create cluster \
-  --name agentic-devops-demo \
-  --region us-east-1 \
-  --nodes 2 \
-  --node-type t3.medium
-```
-
-Update kubeconfig:
-
-```bash
-aws eks update-kubeconfig --region us-east-1 --name agentic-devops-demo
-kubectl get nodes
-```
-
-Build and push API image:
-
-```bash
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-REGION=us-east-1
-ECR_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/orders-api
-
-aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
-
-docker build -t orders-api:latest -f services/orders-api/Dockerfile .
-docker tag orders-api:latest $ECR_URI:latest
-docker push $ECR_URI:latest
-```
-
-Deploy to EKS:
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/orders-service.yaml
-kubectl apply -f k8s/orders-deployment.yaml
-kubectl set image deployment/orders-api orders-api=$ECR_URI:latest -n agentic-devops
-kubectl rollout status deployment/orders-api -n agentic-devops
-```
-
-For public demo access, you can temporarily change the service to `LoadBalancer` in `k8s/orders-service.yaml`, then:
-
-```bash
-kubectl get svc orders-api -n agentic-devops
-```
-
-## GitHub Actions setup
-
-Add repository secrets:
+The following GitHub Secrets are required:
 
 ```text
 MINIGPT_API_KEY
+MINIGPT_CHAT_URL
 MINIGPT_MODEL
-AWS_ROLE_TO_ASSUME
-AWS_REGION
-EKS_CLUSTER_NAME
-ECR_REPOSITORY
 ```
 
-The workflows in `.github/workflows/` are templates:
+Optional secrets:
 
 ```text
-pr-agent.yml       Runs tests, security agent, and PR review agent.
-deploy-eks.yml     Builds image, pushes to ECR, deploys to EKS, runs smoke test, RCA, rollback, issue generation.
+MINIGPT_TEMPERATURE
+MINIGPT_TIMEOUT_SECONDS
+AGENT_GITHUB_TOKEN
 ```
 
-## Safety model
-
-The rollback agent uses two layers:
-
-1. LLM reasoning to summarize the failure and recommend action.
-2. Deterministic policy enforcement from `policies/autonomy_policy.yaml` before any kubectl action is executed.
-
-This is intentional. LLMs can reason, but production actions must be bounded by explicit policy.
-
-## Future work
+Secrets are configured in GitHub:
 
 ```text
-Add Prometheus and Grafana
-Add OPA Gatekeeper policies
-Add GitHub PR comments through API
-Add Slack notification
-Add Argo CD as Phase 2
-Add Argo Rollouts canary as Phase 3
-Add multi-service demo: users-api, orders-api, payments-api
+Repository Settings
+Secrets and variables
+Actions
+Repository secrets
 ```
+
+## Main Files
+
+```text
+.github/workflows/kind-ci.yml
+```
+
+Runs the KIND-based Kubernetes CI workflow.
+
+```text
+k8s/orders-deployment.yaml
+```
+
+Deploys the Orders API into Kubernetes.
+
+```text
+k8s/orders-service.yaml
+```
+
+Creates the Kubernetes service for the Orders API.
+
+```text
+k8s/agent-job-template.yaml
+```
+
+Runs the deployment analysis agent as a temporary Kubernetes Job.
+
+```text
+agents/agent_runner.py
+```
+
+Runs the agent logic.
+
+```text
+services/orders-api/
+```
+
+Contains the Orders API service.
+
+## Local Test
+
+The same flow can also be tested locally with KIND.
+
+Create the cluster:
+
+```bash
+kind create cluster --name safe-agentic-demo
+```
+
+Build the images:
+
+```bash
+docker build -t orders-api:kind -f services/orders-api/Dockerfile .
+docker build -t devops-agent-runner:latest -f agents/Dockerfile .
+```
+
+Load the images into KIND:
+
+```bash
+kind load docker-image orders-api:kind --name safe-agentic-demo
+kind load docker-image devops-agent-runner:latest --name safe-agentic-demo
+```
+
+Create the namespace:
+
+```bash
+kubectl create namespace agentic-devops --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Deploy the Orders API:
+
+```bash
+kubectl apply -f k8s/orders-deployment.yaml
+kubectl apply -f k8s/orders-service.yaml
+```
+
+Check the deployment:
+
+```bash
+kubectl get pods -n agentic-devops
+kubectl get deployments -n agentic-devops
+```
+
+Run the agent job:
+
+```bash
+kubectl delete job devops-agent-rca -n agentic-devops --ignore-not-found
+kubectl apply -f k8s/agent-job-template.yaml
+kubectl logs job/devops-agent-rca -n agentic-devops
+```
+
+Expected output:
+
+```text
+===== RCA REPORT =====
+```
+
+
+## Summary
+
+This repository demonstrates an agentic CI/CD system.
+
+The pipeline deploys an application into a real temporary Kubernetes cluster, collects live deployment evidence, and runs an LLM-based agent that explains the deployment result.
+
+The main value is that the CI/CD process does not only say pass or fail. It also provides a clear report explaining what happened.
+
+````

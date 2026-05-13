@@ -21,8 +21,8 @@ spec:
         runAsUser: 1000
       containers:
         - name: orders-api
-          image: orders-api:local
-          imagePullPolicy: IfNotPresent
+          image: orders-api:kind
+          imagePullPolicy: Never
           ports:
             - containerPort: 8000
           env:

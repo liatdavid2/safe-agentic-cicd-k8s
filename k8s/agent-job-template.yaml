@@ -16,11 +16,23 @@ spec:
           envFrom:
             - secretRef:
                 name: minigpt-secret
-          command: ["python", "-m", "agents.agent_runner"]
+          command: ["sh", "-c"]
           args:
-            - "--mode"
-            - "rca"
-            - "--evidence-file"
-            - "artifacts/deployment_evidence.txt"
-            - "--out"
-            - "artifacts/rca_reports/rca_from_job.md"
+            - |
+              set -e
+
+              python -m agents.agent_runner \
+                --mode rca \
+                --evidence-file /evidence/deployment_evidence.txt \
+                --out /tmp/rca_from_job.md
+
+              echo "===== RCA REPORT ====="
+              cat /tmp/rca_from_job.md
+          volumeMounts:
+            - name: deployment-evidence
+              mountPath: /evidence
+              readOnly: true
+      volumes:
+        - name: deployment-evidence
+          configMap:
+            name: deployment-evidence
