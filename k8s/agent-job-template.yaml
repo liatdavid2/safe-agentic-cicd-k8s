@@ -13,6 +13,9 @@ spec:
         - name: devops-agent-runner
           image: devops-agent-runner:latest
           imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: minigpt-secret
           command: ["sh", "-c"]
           args:
             - |
@@ -20,19 +23,15 @@ spec:
 
               python -m agents.agent_runner \
                 --mode rca \
-                --evidence-file /tmp/deployment_evidence.txt \
+                --evidence-file /evidence/deployment_evidence.txt \
                 --out /tmp/rca_from_job.md
 
-              echo ""
               echo "===== RCA REPORT ====="
               cat /tmp/rca_from_job.md
-          envFrom:
-            - secretRef:
-                name: minigpt-secret
           volumeMounts:
             - name: deployment-evidence
-              mountPath: /tmp/deployment_evidence.txt
-              subPath: deployment_evidence.txt
+              mountPath: /evidence
+              readOnly: true
       volumes:
         - name: deployment-evidence
           configMap:
