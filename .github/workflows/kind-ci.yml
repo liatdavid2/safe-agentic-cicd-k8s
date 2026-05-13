@@ -1,0 +1,186 @@
+name: KIND CI RCA
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  kind-ci-rca:
+    runs-on: ubuntu-latest
+
+    env:
+      NAMESPACE: agentic-devops
+      KIND_CLUSTER_NAME: safe-agentic-demo
+
+      MINIGPT_API_KEY: ${{ secrets.MINIGPT_API_KEY }}
+      MINIGPT_CHAT_URL: ${{ secrets.MINIGPT_CHAT_URL }}
+      MINIGPT_MODEL: ${{ secrets.MINIGPT_MODEL }}
+      MINIGPT_TEMPERATURE: ${{ secrets.MINIGPT_TEMPERATURE || '0.2' }}
+      MINIGPT_TIMEOUT_SECONDS: ${{ secrets.MINIGPT_TIMEOUT_SECONDS || '60' }}
+
+      GITHUB_REPOSITORY_VALUE: ${{ github.repository }}
+      AGENT_GITHUB_TOKEN: ${{ secrets.AGENT_GITHUB_TOKEN || github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install kind
+        run: |
+          curl -Lo kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          kind version
+
+      - name: Install kubectl
+        run: |
+          curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          kubectl version --client=true
+
+      - name: Create KIND cluster
+        run: |
+          kind create cluster --name "${KIND_CLUSTER_NAME}"
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Build Docker images
+        run: |
+          docker build -t orders-api:kind -f services/orders-api/Dockerfile .
+          docker build -t devops-agent-runner:latest -f agents/Dockerfile .
+
+      - name: Load Docker images into KIND
+        run: |
+          kind load docker-image orders-api:kind --name "${KIND_CLUSTER_NAME}"
+          kind load docker-image devops-agent-runner:latest --name "${KIND_CLUSTER_NAME}"
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+
+      - name: Create agent service account
+        run: |
+          kubectl create serviceaccount devops-agent-runner \
+            -n "${NAMESPACE}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Create MINIGPT and GitHub secret
+        run: |
+          kubectl create secret generic minigpt-secret \
+            -n "${NAMESPACE}" \
+            --from-literal=ENVIRONMENT=ci \
+            --from-literal=MINIGPT_API_KEY="${MINIGPT_API_KEY}" \
+            --from-literal=MINIGPT_CHAT_URL="${MINIGPT_CHAT_URL}" \
+            --from-literal=MINIGPT_MODEL="${MINIGPT_MODEL}" \
+            --from-literal=MINIGPT_TEMPERATURE="${MINIGPT_TEMPERATURE}" \
+            --from-literal=MINIGPT_TIMEOUT_SECONDS="${MINIGPT_TIMEOUT_SECONDS}" \
+            --from-literal=GITHUB_REPOSITORY="${GITHUB_REPOSITORY_VALUE}" \
+            --from-literal=GITHUB_TOKEN="${AGENT_GITHUB_TOKEN}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/orders-deployment.yaml
+          kubectl apply -f k8s/orders-service.yaml
+
+      - name: Wait for orders-api and collect evidence
+        run: |
+          mkdir -p artifacts
+
+          DEPLOY_STATUS=0
+          kubectl wait deployment/orders-api \
+            -n "${NAMESPACE}" \
+            --for=condition=Available \
+            --timeout=120s || DEPLOY_STATUS=$?
+
+          {
+            echo "===== CI CONTEXT ====="
+            echo "Repository: ${GITHUB_REPOSITORY_VALUE}"
+            echo "Namespace: ${NAMESPACE}"
+            echo "KIND cluster: ${KIND_CLUSTER_NAME}"
+            echo "Deployment wait exit code: ${DEPLOY_STATUS}"
+            echo
+
+            echo "===== NODES ====="
+            kubectl get nodes -o wide || true
+            echo
+
+            echo "===== DEPLOYMENTS ====="
+            kubectl get deployments -n "${NAMESPACE}" -o wide || true
+            echo
+
+            echo "===== PODS ====="
+            kubectl get pods -n "${NAMESPACE}" -o wide || true
+            echo
+
+            echo "===== SERVICES ====="
+            kubectl get svc -n "${NAMESPACE}" -o wide || true
+            echo
+
+            echo "===== ORDERS API DESCRIBE ====="
+            kubectl describe deployment orders-api -n "${NAMESPACE}" || true
+            echo
+
+            echo "===== ORDERS API LOGS ====="
+            kubectl logs -n "${NAMESPACE}" -l app=orders-api --tail=150 || true
+            echo
+
+            echo "===== EVENTS ====="
+            kubectl get events -n "${NAMESPACE}" --sort-by=.metadata.creationTimestamp || true
+          } > artifacts/deployment_evidence.txt
+
+          cat artifacts/deployment_evidence.txt
+          echo "${DEPLOY_STATUS}" > artifacts/deploy_status.txt
+
+      - name: Create evidence ConfigMap
+        run: |
+          kubectl create configmap deployment-evidence \
+            -n "${NAMESPACE}" \
+            --from-file=deployment_evidence.txt=artifacts/deployment_evidence.txt \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Run RCA agent job
+        run: |
+          kubectl delete job devops-agent-rca -n "${NAMESPACE}" --ignore-not-found
+          kubectl apply -f k8s/agent-job-template.yaml
+
+          kubectl wait job/devops-agent-rca \
+            -n "${NAMESPACE}" \
+            --for=condition=Complete \
+            --timeout=180s || {
+              echo "RCA job failed or timed out"
+              kubectl describe job devops-agent-rca -n "${NAMESPACE}" || true
+              kubectl get pods -n "${NAMESPACE}" || true
+              kubectl logs job/devops-agent-rca -n "${NAMESPACE}" || true
+              exit 1
+            }
+
+          kubectl logs job/devops-agent-rca -n "${NAMESPACE}" | tee artifacts/rca_from_job.md
+
+      - name: Upload RCA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rca-artifacts
+          path: |
+            artifacts/deployment_evidence.txt
+            artifacts/rca_from_job.md
+            artifacts/deploy_status.txt
+
+      - name: Fail CI if deployment failed
+        run: |
+          DEPLOY_STATUS="$(cat artifacts/deploy_status.txt)"
+          if [ "${DEPLOY_STATUS}" != "0" ]; then
+            echo "Deployment failed. RCA report was generated above."
+            exit 1
+          fi
