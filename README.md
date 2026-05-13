@@ -46,11 +46,11 @@ GitHub Actions
           Print Report in CI Logs
 ```
 
-## The Three CI/CD Parts
+## CI/CD Components
 
-### 1. Main CI Workflow
+### 1. Main CI
 
-This is the regular CI check.
+This is the main CI validation workflow.
 
 In GitHub Actions, it appears as:
 
@@ -58,11 +58,41 @@ In GitHub Actions, it appears as:
 Agentic CI / agentic-ci
 ```
 
-If this check is green, the main CI workflow completed successfully.
+This check validates that the repository and API code can pass the basic CI steps.
 
-### 2. Security Approval Gate
+Example result:
 
-This is a manual approval step.
+```text
+Agentic CI / agentic-ci - Successful
+```
+
+### 2. PR Agent Review
+
+This project includes an automated PR review workflow.
+
+In GitHub Actions, it appears as:
+
+```text
+PR Agent Review / pr-agent
+```
+
+The purpose of this workflow is to demonstrate an agentic review step as part of the Pull Request process.
+
+It gives the PR a more realistic engineering workflow:
+
+```text
+Code change
+Automated review
+CI validation
+Security approval
+Kubernetes deployment test
+```
+
+This is useful because real engineering teams often review changes before merging them into the main branch.
+
+### 3. Security Approval
+
+This project includes a security approval gate.
 
 In GitHub Actions, it appears as:
 
@@ -70,15 +100,19 @@ In GitHub Actions, it appears as:
 Agentic CI / security-approval
 ```
 
-This step can stay in a `Waiting` state until approval is given.
+The purpose of this step is to show that security-sensitive changes can require approval before the workflow is considered complete.
 
-The purpose is to show that the pipeline supports security control before continuing with sensitive actions.
+This is useful for demonstrating:
 
-This is useful in real DevOps systems because some changes should not continue automatically without approval.
+```text
+Controlled CI/CD
+Manual approval for risky changes
+Security-aware delivery flow
+```
 
-### 3. Kubernetes Deployment Test with KIND
+### 4. Kubernetes Deployment Test with KIND
 
-This is the Kubernetes part of the pipeline.
+This is the Kubernetes deployment validation workflow.
 
 In GitHub Actions, it appears as:
 
@@ -86,13 +120,13 @@ In GitHub Actions, it appears as:
 KIND CI RCA / kind-ci-rca
 ```
 
-The name in GitHub Actions still contains `RCA`, but the simple meaning is:
+Although the workflow name contains `RCA`, the simple meaning is:
 
 ```text
 Kubernetes deployment analysis
 ```
 
-KIND means Kubernetes in Docker. It allows GitHub Actions to create a temporary Kubernetes cluster inside the CI runner.
+KIND means Kubernetes in Docker. It allows the CI pipeline to create a temporary Kubernetes cluster inside GitHub Actions without using a cloud Kubernetes service.
 
 The workflow does the following:
 
