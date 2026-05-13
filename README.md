@@ -17,14 +17,16 @@ The pipeline does not only build code. It also creates a temporary Kubernetes cl
 ## Simple Architecture
 
 ```text
-GitHub Push or Pull Request
+Developer opens Pull Request
         |
         v
 GitHub Actions
         |
         +--> Main CI
         |
-        +--> Security Approval Gate
+        +--> PR Agent Review
+        |
+        +--> Security Approval
         |
         +--> KIND Kubernetes Deployment Test
                  |
@@ -42,7 +44,7 @@ GitHub Actions
                  |
                  v
           Print Report in CI Logs
-````
+```
 
 ## The Three CI/CD Parts
 
