@@ -125,17 +125,3 @@ jobs:
         with:
           name: agentic-pr-reports
           path: artifacts/*.md
-
-  security-approval:
-    needs: pr-agent
-    if: needs.pr-agent.outputs.security_risk == 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: security-approval
-      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-    steps:
-      - name: Human security approval required
-        run: |
-          echo "High security risk was detected by the Security Agent."
-          echo "A human reviewer approved continuing this workflow."
