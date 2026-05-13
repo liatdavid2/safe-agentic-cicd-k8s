@@ -91,3 +91,67 @@ def metrics() -> Dict[str, object]:
         "last_latency_ms": _LAST_LATENCY_MS,
         "bug_mode": _bug_mode(),
     }
+
+
+class OrderRiskRequest(BaseModel):
+    order_amount: float = Field(..., gt=0)
+    customer_tier: Literal["new", "regular", "trusted"]
+    shipping_country: str
+    billing_country: str
+    payment_method: Literal["credit_card", "paypal", "wire_transfer"]
+    expedited_shipping: bool = False
+
+
+class OrderRiskResponse(BaseModel):
+    order_id: str
+    risk_score: int
+    risk_level: Literal["low", "medium", "high"]
+    decision: Literal["approve", "manual_review", "block"]
+    reasons: List[str]
+
+
+@app.post("/orders/{order_id}/risk-assessment", response_model=OrderRiskResponse)
+def assess_order_risk(order_id: str, request: OrderRiskRequest):
+    risk_score = 0
+    reasons = []
+
+    if request.order_amount >= 1000:
+        risk_score += 35
+        reasons.append("High order amount")
+
+    if request.customer_tier == "new":
+        risk_score += 25
+        reasons.append("New customer account")
+
+    if request.shipping_country != request.billing_country:
+        risk_score += 20
+        reasons.append("Shipping country differs from billing country")
+
+    if request.payment_method == "wire_transfer":
+        risk_score += 15
+        reasons.append("Wire transfer requires additional verification")
+
+    if request.expedited_shipping:
+        risk_score += 10
+        reasons.append("Expedited shipping requested")
+
+    if risk_score >= 70:
+        risk_level = "high"
+        decision = "block"
+    elif risk_score >= 35:
+        risk_level = "medium"
+        decision = "manual_review"
+    else:
+        risk_level = "low"
+        decision = "approve"
+
+    if not reasons:
+        reasons.append("No risk indicators detected")
+
+    return OrderRiskResponse(
+        order_id=order_id,
+        risk_score=min(risk_score, 100),
+        risk_level=risk_level,
+        decision=decision,
+        reasons=reasons,
+    )
