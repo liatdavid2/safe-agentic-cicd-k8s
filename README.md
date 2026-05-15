@@ -13,7 +13,7 @@ This project demonstrates how AI agents can support CI/CD and Kubernetes operati
 - Kubernetes deployment analysis agent
 - GitHub issue automation
 - Approval gate
-- Secrets and ConfigMaps
+- Secrets
 - KIND-based CI/CD validation
 - Docker image loading into Kubernetes
 - LLM-generated deployment analysis report
