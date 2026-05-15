@@ -19,8 +19,8 @@ This project demonstrates how AI agents can support CI/CD and Kubernetes operati
 - LLM-generated deployment analysis report
 
 # Demo: How AI Agents Support CI/CD and Kubernetes Operations
-
-[![Watch the demo](images/video.png)](https://youtu.be/UOc19Gp_O-M)
+The video shows a Pull Request that adds a new API endpoint, runs automated PR review, security approval, CI validation, and a Kubernetes deployment test inside a temporary KIND cluster. After deployment, an LLM-based agent analyzes live Kubernetes evidence and prints a deployment analysis report directly in the GitHub Actions logs.
+[![Watch](images/video.png)](https://youtu.be/UOc19Gp_O-M)
 
 ## What This Project Shows
 
