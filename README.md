@@ -18,6 +18,10 @@ This project demonstrates how AI agents can support CI/CD and Kubernetes operati
 - Docker image loading into Kubernetes
 - LLM-generated deployment analysis report
 
+# Demo: How AI Agents Support CI/CD and Kubernetes Operations
+
+[![Watch the demo](images/video.png)](https://youtu.be/UOc19Gp_O-M)
+
 ## What This Project Shows
 
 This project demonstrates three CI/CD capabilities:
