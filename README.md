@@ -1,8 +1,22 @@
 # Safe Agentic CI/CD with Kubernetes Deployment Analysis Agent
 
-This project demonstrates a CI/CD pipeline that deploys an application into Kubernetes, collects real deployment information, and runs an LLM-based agent that explains the deployment result.
+Built an AI-powered DevOps project that integrates specialized agents into a Kubernetes CI/CD workflow.
 
-The goal is to show a practical DevOps flow with GitHub Actions, Kubernetes, KIND, Docker, and an agent that analyzes deployment evidence.
+The system runs in GitHub Actions, creates a temporary KIND Kubernetes cluster, builds and loads Docker images, deploys a FastAPI service, collects real Kubernetes deployment evidence, and runs an LLM-based agent to analyze the deployment result directly inside the CI logs.
+
+This project demonstrates how AI agents can support CI/CD and Kubernetes operations in a controlled, auditable, and reproducible way.
+
+## What This Project Includes
+
+- PR review agent
+- Security scan agent
+- Kubernetes deployment analysis agent
+- GitHub issue automation
+- Approval gate
+- Secrets and ConfigMaps
+- KIND-based CI/CD validation
+- Docker image loading into Kubernetes
+- LLM-generated deployment analysis report
 
 ## What This Project Shows
 
