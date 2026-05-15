@@ -47,6 +47,16 @@ def readiness_check():
         "service": "orders-api"
     }
 
+@app.get("/orders/{order_id}/status")
+def get_order_status(order_id: str):
+    return {
+        "order_id": order_id,
+        "status": "processing",
+        "payment_status": "authorized",
+        "fulfillment_status": "pending_shipment",
+        "next_step": "Prepare order for shipment"
+    }
+
 @app.get("/orders")
 def list_orders() -> Dict[str, object]:
     start = time.time()
