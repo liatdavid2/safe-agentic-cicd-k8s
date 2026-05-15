@@ -22,16 +22,6 @@ This project demonstrates how AI agents can support CI/CD and Kubernetes operati
 The video shows a Pull Request that adds a new API endpoint, runs automated PR review, security approval, CI validation, and a Kubernetes deployment test inside a temporary KIND cluster. After deployment, an LLM-based agent analyzes live Kubernetes evidence and prints a deployment analysis report directly in the GitHub Actions logs.
 [![Watch](images/video.png)](https://youtu.be/UOc19Gp_O-M)
 
-## What This Project Shows
-
-This project demonstrates three CI/CD capabilities:
-
-1. Main CI workflow
-2. Security approval gate
-3. Kubernetes deployment test with KIND and an analysis agent
-
-The pipeline does not only build code. It also creates a temporary Kubernetes cluster, deploys the service, checks if it is healthy, collects Kubernetes evidence, and generates a deployment analysis report.
-
 ## Simple Architecture
 
 ```text
